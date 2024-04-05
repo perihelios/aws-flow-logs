@@ -225,7 +225,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when protocol = 6 or protocol = 17 then srcport else null srcport"
+      trino-projection   = "case when protocol = 6 or protocol = 17 then srcport else null end srcport"
     }
 
     dstport = {
@@ -236,7 +236,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when protocol = 6 or protocol = 17 then dstport else null dstport"
+      trino-projection   = "case when protocol = 6 or protocol = 17 then dstport else null end dstport"
     }
 
     protocol = {
@@ -274,7 +274,7 @@ locals {
 
     start = {
       description        = "start of aggregation window"
-      hive-physical-type = "timestamp"
+      hive-physical-type = "bigint"
       hive-logical-type  = "timestamp"
       trino-type         = "timestamp(0) with time zone"
       nullable           = false
@@ -285,7 +285,7 @@ locals {
 
     end = {
       description        = "end of aggregation window"
-      hive-physical-type = "timestamp"
+      hive-physical-type = "bigint"
       hive-logical-type  = "timestamp"
       trino-type         = "timestamp(0) with time zone"
       nullable           = false
@@ -310,10 +310,10 @@ locals {
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
-      nullable         = true
-      partition-key    = false
-      synthetic        = false
-      trino-projection = "case type when '-' then null else type end type"
+      nullable           = true
+      partition-key      = false
+      synthetic          = false
+      trino-projection   = "case type when '-' then null else type end type"
     }
 
     packets_lost_no_route = {
@@ -372,7 +372,7 @@ locals {
     }
 
     region = {
-      description        = "TGW region name"
+      description        = "capturing TGW region name"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -464,7 +464,7 @@ locals {
     }
 
     tcp_flag_names = {
-      description        = "TCP packet flag names (TCP only); flags OR-aggregated across all packets in capture window; set of 'SYN', 'ACK', 'PSH', 'FIN', 'RST', 'URG' ('ACK' never appears alone)"
+      description        = "packet TCP flag names (TCP only); flags OR-aggregated across all packets in capture window; set of 'SYN', 'ACK', 'PSH', 'FIN', 'RST', 'URG' ('ACK' never appears alone)"
       hive-physical-type = "array<string>"
       hive-logical-type  = "array<string>"
       trino-type         = "array(varchar)"
