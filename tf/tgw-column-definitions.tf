@@ -74,7 +74,7 @@ locals {
     }
 
     tgw_src_vpc_account_id = {
-      description        = "account ID of packet source VPC"
+      description        = "source TGW attachment ENI account ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -82,21 +82,22 @@ locals {
       partition-key      = false
       synthetic          = false
       trino-projection   = "tgw_src_vpc_account_id"
+      trino-projection   = "case tgw_src_vpc_account_id when '-' then null else tgw_src_vpc_account_id end tgw_src_vpc_account_id"
     }
 
     tgw_dst_vpc_account_id = {
-      description        = "account ID of packet destination VPC"
+      description        = "destination TGW attachment ENI account ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "tgw_dst_vpc_account_id"
+      trino-projection   = "case tgw_dst_vpc_account_id when '-' then null else tgw_dst_vpc_account_id end tgw_dst_vpc_account_id"
     }
 
     tgw_src_vpc_id = {
-      description        = "ID of VPC containing source TGW attachment"
+      description        = "source TGW attachment ENI VPC ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -107,7 +108,7 @@ locals {
     }
 
     tgw_dst_vpc_id = {
-      description        = "ID of VPC containing destination TGW attachment"
+      description        = "destination TGW attachment ENI VPC ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -118,7 +119,7 @@ locals {
     }
 
     tgw_src_subnet_id = {
-      description        = "ID of subnet containing source TGW attachment"
+      description        = "source TGW attachment ENI subnet ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -130,7 +131,7 @@ locals {
 
     tgw_dst_subnet_id = {
       # TODO: Verify subnet and VPC meaning for TGW flow logs; adjust descriptions as necessary
-      description        = "ID of subnet containing destination TGW attachment"
+      description        = "destination TGW attachment ENI subnet ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -141,7 +142,7 @@ locals {
     }
 
     tgw_src_eni = {
-      description        = "ID of TGW attachment source ENI"
+      description        = "source TGW attachment ENI ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -152,7 +153,7 @@ locals {
     }
 
     tgw_dst_eni = {
-      description        = "ID of TGW attachment destination ENI"
+      description        = "destination TGW attachment ENI ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -163,7 +164,7 @@ locals {
     }
 
     tgw_src_az_id = {
-      description        = "source TGW attachment availability zone ID"
+      description        = "source TGW attachment ENI availability zone"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -174,7 +175,7 @@ locals {
     }
 
     tgw_dst_az_id = {
-      description        = "destination TGW attachment availability zone ID"
+      description        = "destination TGW attachment ENI availability zone"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -321,10 +322,10 @@ locals {
       hive-physical-type = "bigint"
       hive-logical-type  = "bigint"
       trino-type         = "bigint"
-      nullable           = false
+      nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "packets_lost_no_route"
+      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets_lost_no_route end packets_lost_no_route"
     }
 
     packets_lost_blackhole = {
@@ -332,10 +333,10 @@ locals {
       hive-physical-type = "bigint"
       hive-logical-type  = "bigint"
       trino-type         = "bigint"
-      nullable           = false
+      nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "packets_lost_blackhole"
+      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets_lost_blackhole end packets_lost_blackhole"
     }
 
     packets_lost_mtu_exceeded = {
@@ -343,10 +344,10 @@ locals {
       hive-physical-type = "bigint"
       hive-logical-type  = "bigint"
       trino-type         = "bigint"
-      nullable           = false
+      nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "packets_lost_mtu_exceeded"
+      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets_lost_mtu_exceeded end packets_lost_mtu_exceeded"
     }
 
     packets_lost_ttl_expired = {
@@ -354,14 +355,14 @@ locals {
       hive-physical-type = "bigint"
       hive-logical-type  = "bigint"
       trino-type         = "bigint"
-      nullable           = false
+      nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "packets_lost_ttl_expired"
+      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets_lost_ttl_expired end packets_lost_ttl_expired"
     }
 
     tcp_flags = {
-      description        = "bitmask of TCP flags, OR-aggregated across all packets in capture window (ACK never appears alone)"
+      description        = "packet TCP flag bitmask ('SYN' | 'ACK' | 'PSH' | 'FIN' | 'RST' | 'URG') (TCP only), OR-aggregated across all packets in capture window; 'ACK' never appears alone"
       hive-physical-type = "int"
       hive-logical-type  = "int"
       trino-type         = "integer"
@@ -464,7 +465,7 @@ locals {
     }
 
     tcp_flag_names = {
-      description        = "packet TCP flag names (TCP only); flags OR-aggregated across all packets in capture window; set of 'SYN', 'ACK', 'PSH', 'FIN', 'RST', 'URG' ('ACK' never appears alone)"
+      description        = "packet TCP flag names ('SYN', 'ACK', 'PSH', 'FIN', 'RST', 'URG') (TCP only), OR-aggregated across all packets in capture window; 'ACK' never appears alone"
       hive-physical-type = "array<string>"
       hive-logical-type  = "array<string>"
       trino-type         = "array(varchar)"
