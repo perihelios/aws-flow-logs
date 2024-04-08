@@ -14,21 +14,6 @@
 # limitations under the License.
 ####
 
-variable "short-window-days" {
-  type    = number
-  default = 32
-}
-
-variable "medium-window-days" {
-  type    = number
-  default = 93
-}
-
-variable "long-window-days" {
-  type    = number
-  default = 398
-}
-
 variable "bucket-name" {
   type = string
 }
@@ -37,16 +22,6 @@ variable "debug-dir" {
   type = string
 
   default = ""
-}
-
-variable "tgw-log-raw-prefix" {
-  type    = string
-  default = "raw/tgw"
-}
-
-variable "vpc-log-raw-prefix" {
-  type    = string
-  default = "raw/vpc"
 }
 
 variable "athena-workgroup-prefix" {
@@ -59,14 +34,135 @@ variable "schema" {
   default = "flow_logs"
 }
 
-variable "tgw-table_name" {
+variable "workgroup" {
+  type    = string
+  default = "flow_logs"
+}
+
+variable "tgw-table-name" {
   type    = string
   default = "__raw_tgw"
 }
 
-variable "vpc-table_name" {
+variable data-management {
+  type = object({
+    tgw = object({
+      raw-s3-prefix = string
+
+      tiers = list(object({
+        days             = number
+        s3-storage-class = string
+        view-name        = optional(string)
+      }))
+
+      delete-after-final-tier = bool
+    })
+
+    vpc = object({
+      raw-s3-prefix = string
+
+      tiers = list(object({
+        days             = number
+        s3-storage-class = string
+        view-name        = optional(string)
+      }))
+
+      delete-after-final-tier = bool
+    })
+  })
+
+  validation {
+    condition     = length(var.data-management.tgw.tiers) > 0
+    error_message = "At least one TGW data tier must be specified"
+  }
+
+  validation {
+    condition     = length(var.data-management.vpc.tiers) > 0
+    error_message = "At least one VPC data tier must be specified"
+  }
+
+  validation {
+    condition = length([
+      for days, indexes in transpose(
+        zipmap(
+          [for index in range(length(var.data-management.tgw.tiers)) : tostring(index)],
+          [for tier in var.data-management.tgw.tiers : [tostring(tier.days)]]
+        )
+      ) : days if length(indexes) != 1
+    ]) == 0
+
+    error_message = "Each TGW data tier must specify a unique number of days (duplicates: ${
+      join(", ", [
+        for days, indexes in transpose(
+          zipmap(
+            [for index in range(length(var.data-management.tgw.tiers)): tostring(index)],
+            [for tier in var.data-management.tgw.tiers: [tostring(tier.days)]]
+          )
+        ): days if length(indexes) != 1
+      ])
+    })"
+  }
+
+  validation {
+    condition = length([
+      for days, indexes in transpose(
+        zipmap(
+          [for index in range(length(var.data-management.vpc.tiers)) : tostring(index)],
+          [for tier in var.data-management.vpc.tiers : [tostring(tier.days)]]
+        )
+      ) : days if length(indexes) != 1
+    ]) == 0
+
+    error_message = "Each VPC data tier must specify a unique number of days (duplicates: ${
+      join(", ", [
+        for days, indexes in transpose(
+          zipmap(
+            [for index in range(length(var.data-management.vpc.tiers)): tostring(index)],
+            [for tier in var.data-management.vpc.tiers: [tostring(tier.days)]]
+          )
+        ): days if length(indexes) != 1
+      ])
+    })"
+  }
+
+  validation {
+    condition = formatlist("%08d", [for tier in var.data-management.tgw.tiers : tier.days]) == sort(formatlist("%08d", [
+      for tier in var.data-management.tgw.tiers : tier.days
+    ]))
+    error_message = "TGW data tiers must be specified in ascending order by number of days"
+  }
+
+  validation {
+    condition = formatlist("%08d", [for tier in var.data-management.vpc.tiers : tier.days]) == sort(formatlist("%08d", [
+      for tier in var.data-management.vpc.tiers : tier.days
+    ]))
+    error_message = "VPC data tiers must be specified in ascending order by number of days"
+  }
+
+  validation {
+    condition     = var.data-management.tgw.tiers[0].s3-storage-class == "STANDARD"
+    error_message = "First TGW data tier must specify \"STANDARD\" S3 storage class (AWS initially stores flow logs in \"STANDARD\" class)"
+  }
+
+  validation {
+    condition     = var.data-management.vpc.tiers[0].s3-storage-class == "STANDARD"
+    error_message = "First VPC data tier must specify \"STANDARD\" S3 storage class (AWS initially stores flow logs in \"STANDARD\" class)"
+  }
+}
+
+variable "tgw-long-term-view-name" {
+  type    = string
+  default = "tgw"
+}
+
+variable "vpc-table-name" {
   type    = string
   default = "__raw_vpc"
+}
+
+variable "vpc-long-term-view-name" {
+  type    = string
+  default = "tgw"
 }
 
 variable "tgw-columns" {

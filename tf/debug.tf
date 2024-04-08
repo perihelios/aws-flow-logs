@@ -18,22 +18,22 @@ resource "local_file" "debug-file" {
   for_each = var.debug-dir == "" ? {} : {
     tgw-sql = {
       filename = "${var.debug-dir}/tgw.sql"
-      value    = module.view-tgw.sql
+      value    = "${local.sql.tgw};"
     }
 
     tgw-json = {
       filename = "${var.debug-dir}/tgw.json"
-      value    = module.view-tgw.json
+      value    = local.trino-view-json.tgw
     }
 
     vpc-sql = {
       filename = "${var.debug-dir}/vpc.sql"
-      value    = module.view-vpc.sql
+      value    = "${local.sql.vpc};"
     }
 
     vpc-json = {
       filename = "${var.debug-dir}/vpc.json"
-      value    = module.view-vpc.json
+      value    = local.trino-view-json.vpc
     }
   }
 

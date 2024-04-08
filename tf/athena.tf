@@ -14,58 +14,206 @@
 # limitations under the License.
 ####
 
-module "table-tgw" {
-  source = "./flow-log-table"
+resource "aws_athena_workgroup" "flow-logs" {
+  name        = var.workgroup
+  description = "Query VPC and TGW flow logs"
 
-  schema = var.schema
-  name   = var.tgw-table_name
+  force_destroy = true
+  state         = "ENABLED"
 
-  bucket           = aws_s3_bucket.flow-logs.bucket
-  file-path-prefix = var.tgw-log-raw-prefix
+  configuration {
+    result_configuration {
+      expected_bucket_owner = data.aws_caller_identity.current.account_id
+      output_location       = "s3://${aws_s3_bucket.flow-logs.bucket}/${var.athena-workgroup-prefix}/"
 
-  history-days = var.long-window-days
-
-  column-definitions = local.tgw-column-definitions
-  columns            = var.tgw-columns
+      acl_configuration {
+        s3_acl_option = "BUCKET_OWNER_FULL_CONTROL"
+      }
+    }
+  }
 }
 
-module "view-tgw" {
-  source = "./trino-view"
+resource "aws_glue_catalog_table" "table" {
+  for_each = {
+    tgw = {
+      name               = var.tgw-table-name
+      column-definitions = local.tgw-column-definitions
+      columns            = var.tgw-columns
+      history-days       = var.data-management.tgw.tiers[length(var.data-management.tgw.tiers) - 1].days
+      s3-prefix          = var.data-management.tgw.raw-s3-prefix
+    }
 
-  schema = var.schema
-  name   = "tgw"
+    vpc = {
+      name               = var.vpc-table-name
+      column-definitions = local.vpc-column-definitions
+      columns            = var.vpc-columns
+      history-days       = var.data-management.vpc.tiers[length(var.data-management.vpc.tiers) - 1].days
+      s3-prefix          = var.data-management.vpc.raw-s3-prefix
+    }
+  }
 
-  source-schema = var.schema
-  source-name   = var.tgw-table_name
+  database_name = var.schema
+  name          = each.value.name
 
-  column-definitions = local.tgw-column-definitions
-  columns            = var.tgw-columns
+  table_type = "EXTERNAL_TABLE"
+  owner      = "hadoop"
+
+  partition_keys {
+    name = "account_id"
+    type = "string"
+  }
+
+  partition_keys {
+    name = "region"
+    type = "string"
+  }
+
+  partition_keys {
+    name = "partition_utc"
+    type = "string"
+  }
+
+  dynamic "storage_descriptor" {
+    for_each = [1] # Single iteration needed for nested dynamic blocks
+
+    content {
+      input_format  = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
+      output_format = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
+
+      number_of_buckets = -1
+
+      location = "s3://${aws_s3_bucket.flow-logs.bucket}/${each.value.s3-prefix}/AWSLogs"
+
+      dynamic "columns" {
+        for_each = [
+          for column-name in sort(each.value.columns) : column-name
+          if !each.value.column-definitions[column-name].synthetic
+        ]
+        iterator = column-name
+
+        content {
+          name = column-name.value
+          type = each.value.column-definitions[column-name.value].hive-physical-type
+        }
+      }
+
+      ser_de_info {
+        parameters = {
+          "serialization.format" = "1"
+        }
+        serialization_library = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+      }
+    }
+  }
+
+  parameters = {
+    "EXTERNAL" = "TRUE",
+
+    "projection.enabled" = "true",
+
+    "projection.account_id.type" = "injected",
+
+    "projection.region.type" = "injected",
+
+    "projection.partition_utc.type"          = "date",
+    "projection.partition_utc.format"        = "yyyy/MM/dd/HH",
+    "projection.partition_utc.range"         = "NOW-${each.value.history-days}DAY,NOW",
+    "projection.partition_utc.interval"      = "1",
+    "projection.partition_utc.interval.unit" = "HOURS",
+
+    "storage.location.template" = "s3://${aws_s3_bucket.flow-logs.bucket}/${each.value.s3-prefix}/AWSLogs/$${account_id}/vpcflowlogs/$${region}/$${partition_utc}/"
+  }
 }
 
-module "table-vpc" {
-  source = "./flow-log-table"
+resource "aws_glue_catalog_table" "view" {
+  for_each = merge(
+    {
+      for tier in var.data-management.tgw.tiers : tier.view-name => {
+      source-name = var.tgw-table-name
 
-  schema = var.schema
-  name   = var.vpc-table_name
+      column-definitions = local.tgw-column-definitions
+      columns            = var.tgw-columns
 
-  bucket           = aws_s3_bucket.flow-logs.bucket
-  file-path-prefix = var.vpc-log-raw-prefix
+      trino-json   = local.trino-view-json.tgw
+      history-days = tier.days
+    } if tier.view-name != null
+    },
+    {
+      for tier in var.data-management.vpc.tiers : tier.view-name => {
+      source-name = var.vpc-table-name
 
-  history-days = var.long-window-days
+      column-definitions = local.vpc-column-definitions
+      columns            = var.vpc-columns
 
-  column-definitions = local.vpc-column-definitions
-  columns            = var.vpc-columns
-}
+      trino-json   = local.trino-view-json.vpc
+      history-days = tier.days
+    } if tier.view-name != null
+    })
 
-module "view-vpc" {
-  source = "./trino-view"
+  database_name = var.schema
+  name          = each.key
 
-  schema = var.schema
-  name   = "vpc"
+  table_type = "VIRTUAL_VIEW"
 
-  source-schema = var.schema
-  source-name   = var.vpc-table_name
+  # The technique of building Presto (now Trino) views as Glue tables was helpfully described in this StackOverflow
+  #  answer: https://stackoverflow.com/a/56347331
+  #
+  # Thanks to Theo (https://stackoverflow.com/users/1109/theo) for his work reverse-engineering how to do this, since
+  #  AWS didn't bother to document it!
+  #
+  view_original_text = "/* Presto View: ${base64encode(each.value.trino-json)} */"
+  view_expanded_text = "/* Presto View */"
 
-  column-definitions = local.vpc-column-definitions
-  columns            = var.vpc-columns
+  dynamic "partition_keys" {
+    for_each = [
+      for column-name in each.value.columns : column-name
+      if each.value.column-definitions[column-name].partition-key
+    ]
+    iterator = column-name
+
+    content {
+      name    = column-name.value
+      type    = each.value.column-definitions[column-name.value].hive-logical-type
+      comment = "Type: ${
+        each.value.column-definitions[column-name.value].trino-type
+        }${
+        each.value.column-definitions[column-name.value].nullable ? " (nullable)" : ""
+        } \u2022 Description: ${
+        each.value.column-definitions[column-name.value].description
+      }"
+    }
+  }
+
+  dynamic "storage_descriptor" {
+    for_each = ["x"] # Single iteration needed for nested dynamic blocks
+
+    content {
+      number_of_buckets = 0
+
+      dynamic "columns" {
+        for_each = [
+          for column-name in each.value.columns : column-name
+          if !each.value.column-definitions[column-name].partition-key
+        ]
+        iterator = column-name
+
+        content {
+          name    = column-name.value
+          type    = each.value.column-definitions[column-name.value].hive-logical-type
+          comment = "Type: ${
+            each.value.column-definitions[column-name.value].trino-type
+            }${
+            each.value.column-definitions[column-name.value].nullable ? " (nullable)" : ""
+            } \u2022 Description: ${
+            each.value.column-definitions[column-name.value].description
+          }"
+        }
+      }
+    }
+  }
+
+  parameters = {
+    presto_view = "true"
+    comment     = "Presto View"
+  }
 }
