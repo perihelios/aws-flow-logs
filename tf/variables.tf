@@ -24,17 +24,19 @@ variable "debug-dir" {
   default = ""
 }
 
-variable "athena-workgroup-prefix" {
-  type    = string
-  default = "athena-workgroup"
+variable "athena-workgroup" {
+  type = object({
+    name      = string
+    s3-prefix = string
+  })
+
+  default = {
+    name      = "flow_logs"
+    s3-prefix = "athena-workgroup"
+  }
 }
 
 variable "schema" {
-  type    = string
-  default = "flow_logs"
-}
-
-variable "workgroup" {
   type    = string
   default = "flow_logs"
 }
@@ -44,7 +46,12 @@ variable "tgw-table-name" {
   default = "__raw_tgw"
 }
 
-variable data-management {
+variable "vpc-table-name" {
+  type    = string
+  default = "__raw_vpc"
+}
+
+variable "data-management" {
   type = object({
     tgw = object({
       raw-s3-prefix = string
@@ -95,10 +102,10 @@ variable data-management {
       join(", ", [
         for days, indexes in transpose(
           zipmap(
-            [for index in range(length(var.data-management.tgw.tiers)): tostring(index)],
-            [for tier in var.data-management.tgw.tiers: [tostring(tier.days)]]
+            [for index in range(length(var.data-management.tgw.tiers)) : tostring(index)],
+            [for tier in var.data-management.tgw.tiers : [tostring(tier.days)]]
           )
-        ): days if length(indexes) != 1
+        ) : days if length(indexes) != 1
       ])
     })"
   }
@@ -117,10 +124,10 @@ variable data-management {
       join(", ", [
         for days, indexes in transpose(
           zipmap(
-            [for index in range(length(var.data-management.vpc.tiers)): tostring(index)],
-            [for tier in var.data-management.vpc.tiers: [tostring(tier.days)]]
+            [for index in range(length(var.data-management.vpc.tiers)) : tostring(index)],
+            [for tier in var.data-management.vpc.tiers : [tostring(tier.days)]]
           )
-        ): days if length(indexes) != 1
+        ) : days if length(indexes) != 1
       ])
     })"
   }
@@ -148,21 +155,6 @@ variable data-management {
     condition     = var.data-management.vpc.tiers[0].s3-storage-class == "STANDARD"
     error_message = "First VPC data tier must specify \"STANDARD\" S3 storage class (AWS initially stores flow logs in \"STANDARD\" class)"
   }
-}
-
-variable "tgw-long-term-view-name" {
-  type    = string
-  default = "tgw"
-}
-
-variable "vpc-table-name" {
-  type    = string
-  default = "__raw_vpc"
-}
-
-variable "vpc-long-term-view-name" {
-  type    = string
-  default = "tgw"
 }
 
 variable "tgw-columns" {

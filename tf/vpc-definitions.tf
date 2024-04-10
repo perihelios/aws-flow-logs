@@ -435,4 +435,35 @@ locals {
       EOF
     }
   }
+
+  vpc-trino-view-definition = {
+    originalSql = "",
+    catalog     = "awsdatacatalog",
+    schema      = var.schema,
+    columns = [
+      for column-name in var.vpc-columns : {
+        name = column-name
+        type = local.vpc-column-definitions[column-name].trino-type
+      }
+    ],
+    owner          = data.aws_caller_identity.current.account_id,
+    runAsInvoker   = false,
+    properties     = {},
+    isProtected    = false,
+    isMultiDialect = false
+  }
+
+  vpc-sql-projections = [
+    for column-name in var.vpc-columns : trimspace(
+      replace(
+        local.vpc-column-definitions[column-name].trino-projection,
+        "/(?m)^${regex("^\\s*", local.vpc-column-definitions[column-name].trino-projection)}/",
+        "  "
+      )
+    )
+  ]
+
+  vpc-base-sql = "select\n  ${
+    join(",\n  ", local.vpc-sql-projections)
+  }\nfrom \"${var.schema}\".\"${var.vpc-table-name}\""
 }

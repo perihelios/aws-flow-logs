@@ -491,4 +491,35 @@ locals {
       EOF
     }
   }
+
+  tgw-trino-view-definition = {
+    originalSql = "",
+    catalog     = "awsdatacatalog",
+    schema      = var.schema,
+    columns = [
+      for column-name in var.tgw-columns : {
+        name = column-name
+        type = local.tgw-column-definitions[column-name].trino-type
+      }
+    ],
+    owner          = data.aws_caller_identity.current.account_id,
+    runAsInvoker   = false,
+    properties     = {},
+    isProtected    = false,
+    isMultiDialect = false
+  }
+
+  tgw-sql-projections = [
+    for column-name in var.tgw-columns : trimspace(
+      replace(
+        local.tgw-column-definitions[column-name].trino-projection,
+        "/(?m)^${regex("^\\s*", local.tgw-column-definitions[column-name].trino-projection)}/",
+        "  "
+      )
+    )
+  ]
+
+  tgw-base-sql = "select\n  ${
+    join(",\n  ", local.tgw-sql-projections)
+  }\nfrom \"${var.schema}\".\"${var.tgw-table-name}\""
 }

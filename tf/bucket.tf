@@ -92,7 +92,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "flow-logs" {
     status = "Enabled"
 
     filter {
-      prefix = "${var.athena-workgroup-prefix}/"
+      prefix = "${var.athena-workgroup.s3-prefix}/"
     }
 
     expiration {

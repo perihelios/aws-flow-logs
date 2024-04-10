@@ -15,7 +15,7 @@
 ####
 
 resource "aws_athena_workgroup" "flow-logs" {
-  name        = var.workgroup
+  name        = var.athena-workgroup.name
   description = "Query VPC and TGW flow logs"
 
   force_destroy = true
@@ -24,7 +24,7 @@ resource "aws_athena_workgroup" "flow-logs" {
   configuration {
     result_configuration {
       expected_bucket_owner = data.aws_caller_identity.current.account_id
-      output_location       = "s3://${aws_s3_bucket.flow-logs.bucket}/${var.athena-workgroup-prefix}/"
+      output_location       = "s3://${aws_s3_bucket.flow-logs.bucket}/${var.athena-workgroup.s3-prefix}/"
 
       acl_configuration {
         s3_acl_option = "BUCKET_OWNER_FULL_CONTROL"
@@ -129,26 +129,32 @@ resource "aws_glue_catalog_table" "view" {
   for_each = merge(
     {
       for tier in var.data-management.tgw.tiers : tier.view-name => {
-      source-name = var.tgw-table-name
+        source-name = var.tgw-table-name
 
-      column-definitions = local.tgw-column-definitions
-      columns            = var.tgw-columns
+        column-definitions = local.tgw-column-definitions
+        columns            = var.tgw-columns
 
-      trino-json   = local.trino-view-json.tgw
-      history-days = tier.days
-    } if tier.view-name != null
+        trino-definition = merge(local.tgw-trino-view-definition, {
+          originalSql = "${local.tgw-base-sql}\nwhere partition_utc > date_format(now() - interval '${tier.days}' day, '%Y/%m/%d/%H')"
+        })
+
+        history-days = tier.days
+      } if tier.view-name != null
     },
     {
       for tier in var.data-management.vpc.tiers : tier.view-name => {
-      source-name = var.vpc-table-name
+        source-name = var.vpc-table-name
 
-      column-definitions = local.vpc-column-definitions
-      columns            = var.vpc-columns
+        column-definitions = local.vpc-column-definitions
+        columns            = var.vpc-columns
 
-      trino-json   = local.trino-view-json.vpc
-      history-days = tier.days
-    } if tier.view-name != null
-    })
+        trino-definition = merge(local.vpc-trino-view-definition, {
+          originalSql = "${local.vpc-base-sql}\nwhere partition_utc > date_format(now() - interval '${tier.days}' day, '%Y/%m/%d/%H')"
+        })
+
+        history-days = tier.days
+      } if tier.view-name != null
+  })
 
   database_name = var.schema
   name          = each.key
@@ -161,7 +167,7 @@ resource "aws_glue_catalog_table" "view" {
   # Thanks to Theo (https://stackoverflow.com/users/1109/theo) for his work reverse-engineering how to do this, since
   #  AWS didn't bother to document it!
   #
-  view_original_text = "/* Presto View: ${base64encode(each.value.trino-json)} */"
+  view_original_text = "/* Presto View: ${base64encode(jsonencode(each.value.trino-definition))} */"
   view_expanded_text = "/* Presto View */"
 
   dynamic "partition_keys" {
@@ -172,8 +178,8 @@ resource "aws_glue_catalog_table" "view" {
     iterator = column-name
 
     content {
-      name    = column-name.value
-      type    = each.value.column-definitions[column-name.value].hive-logical-type
+      name = column-name.value
+      type = each.value.column-definitions[column-name.value].hive-logical-type
       comment = "Type: ${
         each.value.column-definitions[column-name.value].trino-type
         }${
@@ -198,8 +204,8 @@ resource "aws_glue_catalog_table" "view" {
         iterator = column-name
 
         content {
-          name    = column-name.value
-          type    = each.value.column-definitions[column-name.value].hive-logical-type
+          name = column-name.value
+          type = each.value.column-definitions[column-name.value].hive-logical-type
           comment = "Type: ${
             each.value.column-definitions[column-name.value].trino-type
             }${

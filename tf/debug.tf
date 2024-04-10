@@ -14,30 +14,42 @@
 # limitations under the License.
 ####
 
-resource "local_file" "debug-file" {
+resource "local_file" "debug-sql" {
   for_each = var.debug-dir == "" ? {} : {
-    tgw-sql = {
-      filename = "${var.debug-dir}/tgw.sql"
-      value    = "${local.sql.tgw};"
-    }
-
-    tgw-json = {
-      filename = "${var.debug-dir}/tgw.json"
-      value    = local.trino-view-json.tgw
-    }
-
-    vpc-sql = {
-      filename = "${var.debug-dir}/vpc.sql"
-      value    = "${local.sql.vpc};"
-    }
-
-    vpc-json = {
-      filename = "${var.debug-dir}/vpc.json"
-      value    = local.trino-view-json.vpc
+    for name, resource in aws_glue_catalog_table.view : name => {
+      filename = "${var.debug-dir}/${name}.sql"
+      sql = jsondecode(
+        base64decode(
+          replace(
+            resource.view_original_text,
+            "/^\\/\\*\\s+Presto View:\\s+(.*?)\\s+\\*\\/$/",
+            "$1"
+          )
+        )
+      )["originalSql"]
     }
   }
 
   filename        = each.value.filename
-  content         = each.value.value
+  content         = "${each.value.sql}\n"
+  file_permission = "0664"
+}
+
+resource "local_file" "debug-json" {
+  for_each = var.debug-dir == "" ? {} : {
+    for name, resource in aws_glue_catalog_table.view : name => {
+      filename = "${var.debug-dir}/${name}.json"
+      json = base64decode(
+        replace(
+          resource.view_original_text,
+          "/^\\/\\*\\s+Presto View:\\s+(.*?)\\s+\\*\\/$/",
+          "$1"
+        )
+      )
+    }
+  }
+
+  filename        = each.value.filename
+  content         = "${each.value.json}\n"
   file_permission = "0664"
 }
