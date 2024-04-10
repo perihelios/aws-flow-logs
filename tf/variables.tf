@@ -90,44 +90,28 @@ variable "data-management" {
 
   validation {
     condition = length([
-      for days, indexes in transpose(
-        zipmap(
-          [for index in range(length(var.data-management.tgw.tiers)) : tostring(index)],
-          [for tier in var.data-management.tgw.tiers : [tostring(tier.days)]]
-        )
-      ) : days if length(indexes) != 1
+      for days, xs in transpose({ x : [for tier in var.data-management.tgw.tiers : tostring(tier.days)] }) : days
+      if length(xs) != 1
     ]) == 0
 
     error_message = "Each TGW data tier must specify a unique number of days (duplicates: ${
       join(", ", [
-        for days, indexes in transpose(
-          zipmap(
-            [for index in range(length(var.data-management.tgw.tiers)) : tostring(index)],
-            [for tier in var.data-management.tgw.tiers : [tostring(tier.days)]]
-          )
-        ) : days if length(indexes) != 1
+        for days, xs in transpose({ x : [for tier in var.data-management.tgw.tiers : tostring(tier.days)] }) : days
+        if length(xs) != 1
       ])
     })"
   }
 
   validation {
     condition = length([
-      for days, indexes in transpose(
-        zipmap(
-          [for index in range(length(var.data-management.vpc.tiers)) : tostring(index)],
-          [for tier in var.data-management.vpc.tiers : [tostring(tier.days)]]
-        )
-      ) : days if length(indexes) != 1
+      for days, xs in transpose({ x : [for tier in var.data-management.vpc.tiers : tostring(tier.days)] }) : days
+      if length(xs) != 1
     ]) == 0
 
     error_message = "Each VPC data tier must specify a unique number of days (duplicates: ${
       join(", ", [
-        for days, indexes in transpose(
-          zipmap(
-            [for index in range(length(var.data-management.vpc.tiers)) : tostring(index)],
-            [for tier in var.data-management.vpc.tiers : [tostring(tier.days)]]
-          )
-        ) : days if length(indexes) != 1
+        for days, xs in transpose({ x : [for tier in var.data-management.vpc.tiers : tostring(tier.days)] }) : days
+        if length(xs) != 1
       ])
     })"
   }
