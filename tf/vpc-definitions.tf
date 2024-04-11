@@ -439,7 +439,7 @@ locals {
   }
 
   vpc-trino-view-definition = {
-    originalSql = "",
+    originalSql = "<this value must be overwritten and provided by caller>",
     catalog     = "awsdatacatalog",
     schema      = var.schema,
     columns = [
