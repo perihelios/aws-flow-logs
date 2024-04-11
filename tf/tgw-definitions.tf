@@ -30,7 +30,7 @@ locals {
     }
 
     resource_type = {
-      description        = "capturing resource type (one of 'TransitGateway', 'TransitGatewayAttachment')"
+      description        = "flow log associated resource type (one of 'TransitGateway', 'TransitGatewayAttachment')"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -82,7 +82,7 @@ locals {
       partition-key      = false
       synthetic          = false
       trino-projection   = "tgw_src_vpc_account_id"
-      trino-projection   = "case tgw_src_vpc_account_id when '-' then null else tgw_src_vpc_account_id end tgw_src_vpc_account_id"
+      trino-projection   = "nullif(tgw_src_vpc_account_id, '-') tgw_src_vpc_account_id"
     }
 
     tgw_dst_vpc_account_id = {
@@ -93,7 +93,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_dst_vpc_account_id when '-' then null else tgw_dst_vpc_account_id end tgw_dst_vpc_account_id"
+      trino-projection   = "nullif(tgw_dst_vpc_account_id, '-') tgw_dst_vpc_account_id"
     }
 
     tgw_src_vpc_id = {
@@ -104,7 +104,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_src_vpc_id when '-' then null else tgw_src_vpc_id end tgw_src_vpc_id"
+      trino-projection   = "nullif(tgw_src_vpc_id, '-') tgw_src_vpc_id"
     }
 
     tgw_dst_vpc_id = {
@@ -115,30 +115,30 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_dst_vpc_id when '-' then null else tgw_dst_vpc_id end tgw_dst_vpc_id"
+      trino-projection   = "nullif(tgw_dst_vpc_id, '-') tgw_dst_vpc_id"
     }
 
     tgw_src_subnet_id = {
-      description        = "source TGW attachment ENI subnet ID"
+      description        = "source TGW attachment ENI VPC subnet ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_src_subnet_id when '-' then null else tgw_src_subnet_id end tgw_src_subnet_id"
+      trino-projection   = "nullif(tgw_src_subnet_id, '-') tgw_src_subnet_id"
     }
 
     tgw_dst_subnet_id = {
       # TODO: Verify subnet and VPC meaning for TGW flow logs; adjust descriptions as necessary
-      description        = "destination TGW attachment ENI subnet ID"
+      description        = "destination TGW attachment ENI VPC subnet ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_dst_subnet_id when '-' then null else tgw_dst_subnet_id end tgw_dst_subnet_id"
+      trino-projection   = "nullif(tgw_dst_subnet_id, '-') tgw_dst_subnet_id"
     }
 
     tgw_src_eni = {
@@ -149,7 +149,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_src_eni when '-' then null else tgw_src_eni end tgw_src_eni"
+      trino-projection   = "nullif(tgw_src_eni, '-') tgw_src_eni"
     }
 
     tgw_dst_eni = {
@@ -160,29 +160,29 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_dst_eni when '-' then null else tgw_dst_eni end tgw_dst_eni"
+      trino-projection   = "nullif(tgw_dst_eni, '-') tgw_dst_eni"
     }
 
     tgw_src_az_id = {
-      description        = "source TGW attachment ENI availability zone"
+      description        = "source TGW attachment ENI availability zone ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_src_az_id when '-' then null else tgw_src_az_id end tgw_src_az_id"
+      trino-projection   = "nullif(tgw_src_az_id, '-') tgw_src_az_id"
     }
 
     tgw_dst_az_id = {
-      description        = "destination TGW attachment ENI availability zone"
+      description        = "destination TGW attachment ENI availability zone ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_dst_az_id when '-' then null else tgw_dst_az_id end tgw_dst_az_id"
+      trino-projection   = "nullif(tgw_dst_az_id, '-') tgw_dst_az_id"
     }
 
     tgw_pair_attachment_id = {
@@ -193,7 +193,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case tgw_pair_attachment_id when '-' then null else tgw_pair_attachment_id end tgw_pair_attachment_id"
+      trino-projection   = "nullif(tgw_pair_attachment_id, '-') tgw_pair_attachment_id"
     }
 
     srcaddr = {
@@ -230,7 +230,7 @@ locals {
     }
 
     dstport = {
-      description        = "packet source port (for TCP and UDP)"
+      description        = "packet destination port (for TCP and UDP)"
       hive-physical-type = "int"
       hive-logical-type  = "int"
       trino-type         = "integer"
@@ -243,12 +243,12 @@ locals {
     protocol = {
       description        = "packet IANA protocol number"
       hive-physical-type = "bigint"
-      hive-logical-type  = "bigint"
-      trino-type         = "bigint"
+      hive-logical-type  = "int"
+      trino-type         = "integer"
       nullable           = false
       partition-key      = false
       synthetic          = false
-      trino-projection   = "protocol"
+      trino-projection   = "case log_status when 'OK' then cast(protocol as integer) else null end protocol"
     }
 
     packets = {
@@ -314,7 +314,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case type when '-' then null else type end type"
+      trino-projection   = "nullif(type, '-') type"
     }
 
     packets_lost_no_route = {
@@ -325,7 +325,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets_lost_no_route end packets_lost_no_route"
+      trino-projection   = "case log_status when 'SKIPDATA' then null else packets_lost_no_route end packets_lost_no_route"
     }
 
     packets_lost_blackhole = {
@@ -336,7 +336,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets_lost_blackhole end packets_lost_blackhole"
+      trino-projection   = "case log_status when 'SKIPDATA' then null else packets_lost_blackhole end packets_lost_blackhole"
     }
 
     packets_lost_mtu_exceeded = {
@@ -347,7 +347,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets_lost_mtu_exceeded end packets_lost_mtu_exceeded"
+      trino-projection   = "case log_status when 'SKIPDATA' then null else packets_lost_mtu_exceeded end packets_lost_mtu_exceeded"
     }
 
     packets_lost_ttl_expired = {
@@ -358,18 +358,18 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets_lost_ttl_expired end packets_lost_ttl_expired"
+      trino-projection   = "case log_status when 'SKIPDATA' then null else packets_lost_ttl_expired end packets_lost_ttl_expired"
     }
 
     tcp_flags = {
-      description        = "packet TCP flag bitmask ('SYN' | 'ACK' | 'PSH' | 'FIN' | 'RST' | 'URG') (TCP only), OR-aggregated across all packets in capture window; 'ACK' never appears alone"
+      description        = "packet TCP flag bitmask (SYN | ACK | PSH | FIN | RST | URG) (TCP only), OR-aggregated across all packets in capture window; ACK never appears alone"
       hive-physical-type = "int"
       hive-logical-type  = "int"
       trino-type         = "integer"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when protocol = 6 then tcp_flags else null end tcp_flags"
+      trino-projection   = "case protocol when 6 then tcp_flags else null end tcp_flags"
     }
 
     region = {
@@ -391,29 +391,29 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case flow_direction when '-' then null else flow_direction end flow_direction"
+      trino-projection   = "nullif(flow_direction, '-') flow_direction"
     }
 
     pkt_src_aws_service = {
-      description        = "AWS service corresponding to packet source address, if applicable"
+      description        = "packet source address AWS service type, if any"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case pkt_src_aws_service when '-' then null else pkt_src_aws_service end pkt_src_aws_service"
+      trino-projection   = "nullif(pkt_src_aws_service, '-') pkt_src_aws_service"
     }
 
     pkt_dst_aws_service = {
-      description        = "AWS service corresponding to packet destination address, if applicable"
+      description        = "packet destination address AWS service type, if any"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case pkt_dst_aws_service when '-' then null else pkt_dst_aws_service end pkt_dst_aws_service"
+      trino-projection   = "nullif(pkt_dst_aws_service, '-') pkt_dst_aws_service"
     }
 
 
@@ -472,10 +472,9 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = true
-
-      trino-projection = <<EOF
-        case
-          when protocol = 6 then
+      trino-projection   = <<EOF
+        case protocol
+          when 6 then
             filter(
               array[
                 if(bitwise_and(tcp_flags, 2) != 0 , 'SYN'),

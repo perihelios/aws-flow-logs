@@ -52,25 +52,25 @@ locals {
     }
 
     srcaddr = {
-      description        = "packet source address for ingress traffic; capturing ENI address for egress traffic"
+      description        = "packet source address for ingress traffic; capturing ENI private address for egress traffic"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "ipaddress"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when srcaddr = '-' then null else cast(srcaddr as ipaddress) end srcaddr"
+      trino-projection   = "case srcaddr when '-' then null else cast(srcaddr as ipaddress) end srcaddr"
     }
 
     dstaddr = {
-      description        = "packet destination address for egress traffic; capturing ENI address for ingress traffic"
+      description        = "packet destination address for egress traffic; capturing ENI private address for ingress traffic"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "ipaddress"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when dstaddr = '-' then null else cast(dstaddr as ipaddress) end dstaddr"
+      trino-projection   = "case dstaddr when '-' then null else cast(dstaddr as ipaddress) end dstaddr"
     }
 
     srcport = {
@@ -97,13 +97,13 @@ locals {
 
     protocol = {
       description        = "packet IANA protocol number"
-      hive-physical-type = "bigint"
+      hive-physical-type = "int"
       hive-logical-type  = "int"
       trino-type         = "integer"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when log_status = 'OK' then cast(protocol as integer) else null end protocol"
+      trino-projection   = "case log_status when 'OK' then protocol else null end protocol"
     }
 
     packets = {
@@ -114,7 +114,8 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when log_status = 'SKIPDATA' then null else packets end packets"
+      // TODO: Check NODATA and coalesce to 0 if null
+      trino-projection   = "case log_status when 'SKIPDATA' then null else packets end packets"
     }
 
     bytes = {
@@ -125,7 +126,8 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when log_status = 'SKIPDATA' then null else bytes end bytes"
+      // TODO: Check NODATA and coalesce to 0 if null
+      trino-projection   = "case log_status when 'SKIPDATA' then null else bytes end bytes"
     }
 
     start = {
@@ -151,14 +153,14 @@ locals {
     }
 
     action = {
-      description        = "action taken (one of 'ACCEPT', 'REJECT')"
+      description        = "result of filtering by NACLs and security groups (one of 'ACCEPT', 'REJECT')"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when action = '-' then null else action end action"
+      trino-projection   = "nullif(action, '-') action"
     }
 
     log_status = {
@@ -180,7 +182,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when vpc_id = '-' then null else vpc_id end vpc_id"
+      trino-projection   = "nullif(vpc_id, '-') vpc_id"
     }
 
     subnet_id = {
@@ -191,40 +193,40 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when subnet_id = '-' then null else subnet_id end subnet_id"
+      trino-projection   = "nullif(subnet_id, '-') subnet_id"
     }
 
     instance_id = {
-      description        = "capturing ENI attachment EC2 instance (if any)"
+      description        = "capturing ENI EC2 instance ID (if ENI attached to EC2 instance)"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when instance_id = '-' then null else instance_id end instance_id"
+      trino-projection   = "nullif(instance_id, '-') instance_id"
     }
 
     tcp_flags = {
-      description        = "packet TCP flags OR-aggregated bitmask (SYN | ACK | FIN | RST); ACK is never seen alone"
+      description        = "packet TCP flag bitmask (SYN | ACK | FIN | RST) (TCP only), OR-aggregated across all packets in capture window; ACK never appears alone"
       hive-physical-type = "int"
       hive-logical-type  = "int"
       trino-type         = "integer"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when protocol = 6 then tcp_flags else null end tcp_flags"
+      trino-projection   = "case protocol when 6 then tcp_flags else null end tcp_flags"
     }
 
     type = {
-      description        = "packet type (one of 'IPv4', 'IPv6', 'EFA')"
+      description        = "traffic type (one of 'IPv4', 'IPv6', 'EFA')"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when type = '-' then null else type end type"
+      trino-projection   = "nullif(type, '-') type"
     }
 
     pkt_srcaddr = {
@@ -235,7 +237,7 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when pkt_srcaddr = '-' then null else cast(pkt_srcaddr as ipaddress) end pkt_srcaddr"
+      trino-projection   = "case pkt_srcaddr when '-' then null else cast(pkt_srcaddr as ipaddress) end pkt_srcaddr"
     }
 
     pkt_dstaddr = {
@@ -246,11 +248,11 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when pkt_dstaddr = '-' then null else cast(pkt_dstaddr as ipaddress) end pkt_dstaddr"
+      trino-projection   = "case pkt_dstaddr when '-' then null else cast(pkt_dstaddr as ipaddress) end pkt_dstaddr"
     }
 
     region = {
-      description        = "capturing ENI region"
+      description        = "capturing ENI region name"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
@@ -268,62 +270,62 @@ locals {
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when az_id = '-' then null else az_id end az_id"
+      trino-projection   = "nullif(az_id, '-') az_id"
     }
 
     sublocation_type = {
-      description        = "type of sublocation (one of 'wavelength', 'outpost', 'localzone')"
+      description        = "capturing ENI sublocation type (one of 'wavelength', 'outpost', 'localzone')"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when sublocation_type = '-' then null else sublocation_type end sublocation_type"
+      trino-projection   = "nullif(sublocation_type, '-') sublocation_type"
     }
 
     sublocation_id = {
-      description        = "ID of sublocation"
+      description        = "capturing ENI sublocation ID"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when sublocation_id = '-' then null else sublocation_id end sublocation_id"
+      trino-projection   = "nullif(sublocation_id, '-') sublocation_id"
     }
 
     pkt_src_aws_service = {
-      description        = "AWS service type for packet source address, if any"
+      description        = "packet source address AWS service type, if any"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when pkt_src_aws_service = '-' then null else pkt_src_aws_service end pkt_src_aws_service"
+      trino-projection   = "nullif(pkt_src_aws_service, '-') pkt_src_aws_service"
     }
 
     pkt_dst_aws_service = {
-      description        = "AWS service type for packet destination address, if any"
+      description        = "packet destination address AWS service type, if any"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when pkt_dst_aws_service = '-' then null else pkt_dst_aws_service end pkt_dst_aws_service"
+      trino-projection   = "nullif(pkt_dst_aws_service, '-') pkt_dst_aws_service"
     }
 
     flow_direction = {
-      description        = "packet flow direction from ENI perspective (one of 'ingress', 'egress')"
+      description        = "packet direction with respect to capturing ENI (one of 'ingress', 'egress')"
       hive-physical-type = "string"
       hive-logical-type  = "string"
       trino-type         = "varchar"
       nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "case when flow_direction = '-' then null else flow_direction end flow_direction"
+      trino-projection   = "nullif(flow_direction, '-') flow_direction"
     }
 
     traffic_path = {
@@ -386,7 +388,7 @@ locals {
     }
 
     tcp_flag_names = {
-      description        = "TCP packet flag names (TCP only); flags OR-aggregated across all packets in capture window; set of 'SYN', 'ACK', 'PSH', 'FIN', 'RST', 'URG' ('ACK' never appears alone)"
+      description        = "packet TCP flag names ('SYN', 'ACK', 'FIN', 'RST') (TCP only), OR-aggregated across all packets in capture window; 'ACK' never appears alone"
       hive-physical-type = "array<string>"
       hive-logical-type  = "array<string>"
       trino-type         = "array(varchar)"
@@ -394,8 +396,8 @@ locals {
       partition-key      = false
       synthetic          = true
       trino-projection   = <<EOF
-        case
-          when protocol = 6 then
+        case protocol
+          when 6 then
             filter(
               array[
                 if(bitwise_and(tcp_flags, 2) != 0 , 'SYN'),
