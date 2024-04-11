@@ -245,7 +245,7 @@ locals {
       hive-physical-type = "bigint"
       hive-logical-type  = "int"
       trino-type         = "integer"
-      nullable           = false
+      nullable           = true
       partition-key      = false
       synthetic          = false
       trino-projection   = "case log_status when 'OK' then cast(protocol as integer) else null end protocol"
@@ -256,10 +256,11 @@ locals {
       hive-physical-type = "bigint"
       hive-logical-type  = "bigint"
       trino-type         = "bigint"
-      nullable           = false
+      nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "packets"
+      // TODO: Check NODATA and coalesce to 0 if null
+      trino-projection   = "case log_status when 'SKIPDATA' then null else packets end packets"
     }
 
     bytes = {
@@ -267,10 +268,11 @@ locals {
       hive-physical-type = "bigint"
       hive-logical-type  = "bigint"
       trino-type         = "bigint"
-      nullable           = false
+      nullable           = true
       partition-key      = false
       synthetic          = false
-      trino-projection   = "bytes"
+      // TODO: Check NODATA and coalesce to 0 if null
+      trino-projection   = "case log_status when 'SKIPDATA' then null else bytes end bytes"
     }
 
     start = {
