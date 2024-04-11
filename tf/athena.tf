@@ -149,7 +149,7 @@ resource "aws_glue_catalog_table" "view" {
         columns            = var.vpc-columns
 
         trino-definition = merge(local.vpc-trino-view-definition, {
-          originalSql = "${local.vpc-base-sql}\nwhere partition_utc > date_format(now() - interval '${tier.days}' day, '%Y/%m/%d/%H')"
+          originalSql = "${local.vpc-base-sql}\nwhere partition_utc > date_format(at_timezone(now(), 'UTC') - interval '${tier.days}' day, '%Y/%m/%d/%H')"
         })
 
         history-days = tier.days
