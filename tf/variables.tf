@@ -94,12 +94,14 @@ variable "data-management" {
       if length(xs) != 1
     ]) == 0
 
-    error_message = "Each TGW data tier must specify a unique number of days (duplicates: ${
+    error_message = join("", [
+      "Each TGW data tier must specify a unique number of days (duplicates: ",
       join(", ", [
         for days, xs in transpose({ x : [for tier in var.data-management.tgw.tiers : tostring(tier.days)] }) : days
         if length(xs) != 1
-      ])
-    })"
+      ]),
+      ")"
+    ])
   }
 
   validation {
@@ -108,12 +110,14 @@ variable "data-management" {
       if length(xs) != 1
     ]) == 0
 
-    error_message = "Each VPC data tier must specify a unique number of days (duplicates: ${
+    error_message = join("", [
+      "Each VPC data tier must specify a unique number of days (duplicates: ",
       join(", ", [
         for days, xs in transpose({ x : [for tier in var.data-management.vpc.tiers : tostring(tier.days)] }) : days
         if length(xs) != 1
-      ])
-    })"
+      ]),
+      ")"
+    ])
   }
 
   validation {
@@ -131,12 +135,14 @@ variable "data-management" {
   }
 
   validation {
-    condition     = var.data-management.tgw.tiers[0].s3-storage-class == "STANDARD"
+    condition = var.data-management.tgw.tiers[0
+    ].s3-storage-class == "STANDARD"
     error_message = "First TGW data tier must specify \"STANDARD\" S3 storage class (AWS initially stores flow logs in \"STANDARD\" class)"
   }
 
   validation {
-    condition     = var.data-management.vpc.tiers[0].s3-storage-class == "STANDARD"
+    condition = var.data-management.vpc.tiers[0
+    ].s3-storage-class == "STANDARD"
     error_message = "First VPC data tier must specify \"STANDARD\" S3 storage class (AWS initially stores flow logs in \"STANDARD\" class)"
   }
 }
@@ -160,8 +166,8 @@ variable "tgw-columns" {
     "bytes",
     "tcp_flag_names",
 
-    "region",
     "account_id",
+    "region",
     "tgw_id",
     "tgw_attachment_id",
     "tgw_pair_attachment_id",
@@ -319,8 +325,8 @@ variable "vpc-columns" {
     "bytes",
     "tcp_flag_names",
 
-    "region",
     "account_id",
+    "region",
     "vpc_id",
     "subnet_id",
     "az_id",

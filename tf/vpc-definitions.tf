@@ -115,7 +115,7 @@ locals {
       partition-key      = false
       synthetic          = false
       // TODO: Check NODATA and coalesce to 0 if null
-      trino-projection   = "case log_status when 'SKIPDATA' then null else packets end packets"
+      trino-projection = "case log_status when 'SKIPDATA' then null else packets end packets"
     }
 
     bytes = {
@@ -127,7 +127,7 @@ locals {
       partition-key      = false
       synthetic          = false
       // TODO: Check NODATA and coalesce to 0 if null
-      trino-projection   = "case log_status when 'SKIPDATA' then null else bytes end bytes"
+      trino-projection = "case log_status when 'SKIPDATA' then null else bytes end bytes"
     }
 
     start = {
@@ -437,6 +437,34 @@ locals {
       EOF
     }
   }
+
+  vpc-hive-columns = [
+    for column in var.vpc-columns : {
+      name = column
+      type = local.vpc-column-definitions[column].hive-logical-type
+      comment = "Type: ${
+        local.vpc-column-definitions[column].trino-type
+        }${
+        local.vpc-column-definitions[column].nullable ? " (nullable)" : ""
+        } \u2022 Description: ${
+        local.vpc-column-definitions[column].description
+      }"
+    } if !local.vpc-column-definitions[column].partition-key
+  ]
+
+  vpc-hive-partition-keys = [
+    for column in var.vpc-columns : {
+      name = column
+      type = local.vpc-column-definitions[column].hive-logical-type
+      comment = "Type: ${
+        local.vpc-column-definitions[column].trino-type
+        }${
+        local.vpc-column-definitions[column].nullable ? " (nullable)" : ""
+        } \u2022 Description: ${
+        local.vpc-column-definitions[column].description
+      }"
+    } if local.vpc-column-definitions[column].partition-key
+  ]
 
   vpc-trino-view-definition = {
     originalSql = "<this value must be overwritten and provided by caller>",

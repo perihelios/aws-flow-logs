@@ -16,21 +16,11 @@
 
 resource "local_file" "debug-table-hive-json" {
   for_each = var.debug-dir == "" ? {} : {
-    for name, resource in aws_glue_catalog_table.table : name => {
-      filename = "${var.debug-dir}/${resource.name}.hive.json"
+    for name, table in local.athena-table-definitions : name => {
+      filename = "${var.debug-dir}/${name}.hive.json"
       json = jsonencode({
-        columns = [
-          for column in resource.storage_descriptor[0].columns: {
-            name = column.name
-            type = column.type
-          }
-        ]
-        partition_keys = [
-          for column in resource.partition_keys: {
-            name = column.name
-            type = column.type
-          }
-        ]
+        columns        = table.hive-columns
+        partition_keys = table.hive-partition-keys
       })
     }
   }
@@ -42,17 +32,9 @@ resource "local_file" "debug-table-hive-json" {
 
 resource "local_file" "debug-view-trino-sql" {
   for_each = var.debug-dir == "" ? {} : {
-    for name, resource in aws_glue_catalog_table.view : name => {
-      filename = "${var.debug-dir}/${resource.name}.trino.sql"
-      sql = jsondecode(
-        base64decode(
-          replace(
-            resource.view_original_text,
-            "/^\\/\\*\\s+Presto View:\\s+(.*?)\\s+\\*\\/$/",
-            "$1"
-          )
-        )
-      )["originalSql"]
+    for name, view in local.athena-view-definitions : name => {
+      filename = "${var.debug-dir}/${name}.trino.sql"
+      sql      = view.trino-view.originalSql
     }
   }
 
@@ -63,15 +45,9 @@ resource "local_file" "debug-view-trino-sql" {
 
 resource "local_file" "debug-view-trino-json" {
   for_each = var.debug-dir == "" ? {} : {
-    for name, resource in aws_glue_catalog_table.view : name => {
-      filename = "${var.debug-dir}/${resource.name}.trino.json"
-      json = base64decode(
-        replace(
-          resource.view_original_text,
-          "/^\\/\\*\\s+Presto View:\\s+(.*?)\\s+\\*\\/$/",
-          "$1"
-        )
-      )
+    for name, view in local.athena-view-definitions : name => {
+      filename = "${var.debug-dir}/${name}.trino.json"
+      json     = jsonencode(view.trino-view)
     }
   }
 
@@ -82,23 +58,11 @@ resource "local_file" "debug-view-trino-json" {
 
 resource "local_file" "debug-view-hive-json" {
   for_each = var.debug-dir == "" ? {} : {
-    for name, resource in aws_glue_catalog_table.view : name => {
-      filename = "${var.debug-dir}/${resource.name}.hive.json"
+    for name, view in local.athena-view-definitions : name => {
+      filename = "${var.debug-dir}/${name}.hive.json"
       json = jsonencode({
-        columns = [
-          for column in resource.storage_descriptor[0].columns: {
-            name = column.name
-            type = column.type
-            comment = column.comment
-          }
-        ]
-        partition_keys = [
-          for column in resource.partition_keys: {
-            name = column.name
-            type = column.type
-            comment = column.comment
-          }
-        ]
+        columns        = view.hive-columns
+        partition_keys = view.hive-partition-keys
       })
     }
   }

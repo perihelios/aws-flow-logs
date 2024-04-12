@@ -33,48 +33,32 @@ resource "aws_athena_workgroup" "flow-logs" {
   }
 }
 
+resource "aws_glue_catalog_database" "flow-logs" {
+  name        = var.schema
+  description = "VPC and TGW flow logs"
+}
+
 resource "aws_glue_catalog_table" "table" {
-  for_each = {
-    tgw = {
-      name               = var.tgw-table-name
-      column-definitions = local.tgw-column-definitions
-      columns            = var.tgw-columns
-      history-days       = var.data-management.tgw.tiers[length(var.data-management.tgw.tiers) - 1].days
-      s3-prefix          = var.data-management.tgw.raw-s3-prefix
-    }
+  for_each = local.athena-table-definitions
 
-    vpc = {
-      name               = var.vpc-table-name
-      column-definitions = local.vpc-column-definitions
-      columns            = var.vpc-columns
-      history-days       = var.data-management.vpc.tiers[length(var.data-management.vpc.tiers) - 1].days
-      s3-prefix          = var.data-management.vpc.raw-s3-prefix
-    }
-  }
-
-  database_name = var.schema
-  name          = each.value.name
+  database_name = aws_glue_catalog_database.flow-logs.name
+  name          = each.key
 
   table_type = "EXTERNAL_TABLE"
   owner      = "hadoop"
 
-  partition_keys {
-    name = "account_id"
-    type = "string"
-  }
+  dynamic "partition_keys" {
+    for_each = each.value.hive-partition-keys
+    iterator = partition-key
 
-  partition_keys {
-    name = "region"
-    type = "string"
-  }
-
-  partition_keys {
-    name = "partition_utc"
-    type = "string"
+    content {
+      name = partition-key.value.name
+      type = partition-key.value.type
+    }
   }
 
   dynamic "storage_descriptor" {
-    for_each = [1] # Single iteration needed for nested dynamic blocks
+    for_each = ["x"] # Nested dynamic block "columns" requires outer dynamic block with single iteration
 
     content {
       input_format  = "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
@@ -85,15 +69,12 @@ resource "aws_glue_catalog_table" "table" {
       location = "s3://${aws_s3_bucket.flow-logs.bucket}/${each.value.s3-prefix}/AWSLogs"
 
       dynamic "columns" {
-        for_each = [
-          for column-name in sort(each.value.columns) : column-name
-          if !each.value.column-definitions[column-name].synthetic
-        ]
-        iterator = column-name
+        for_each = each.value.hive-columns
+        iterator = column
 
         content {
-          name = column-name.value
-          type = each.value.column-definitions[column-name.value].hive-physical-type
+          name = column.value.name
+          type = column.value.type
         }
       }
 
@@ -117,7 +98,7 @@ resource "aws_glue_catalog_table" "table" {
 
     "projection.partition_utc.type"          = "date",
     "projection.partition_utc.format"        = "yyyy/MM/dd/HH",
-    "projection.partition_utc.range"         = "NOW-${each.value.history-days}DAY,NOW",
+    "projection.partition_utc.range"         = "NOW-${each.value.days}DAY,NOW",
     "projection.partition_utc.interval"      = "1",
     "projection.partition_utc.interval.unit" = "HOURS",
 
@@ -126,37 +107,9 @@ resource "aws_glue_catalog_table" "table" {
 }
 
 resource "aws_glue_catalog_table" "view" {
-  for_each = merge(
-    {
-      for tier in var.data-management.tgw.tiers : tier.view-name => {
-        source-name = var.tgw-table-name
+  for_each = local.athena-view-definitions
 
-        column-definitions = local.tgw-column-definitions
-        columns            = var.tgw-columns
-
-        trino-definition = merge(local.tgw-trino-view-definition, {
-          originalSql = "${local.tgw-base-sql}\nwhere partition_utc > date_format(now() - interval '${tier.days}' day, '%Y/%m/%d/%H')"
-        })
-
-        history-days = tier.days
-      } if tier.view-name != null
-    },
-    {
-      for tier in var.data-management.vpc.tiers : tier.view-name => {
-        source-name = var.vpc-table-name
-
-        column-definitions = local.vpc-column-definitions
-        columns            = var.vpc-columns
-
-        trino-definition = merge(local.vpc-trino-view-definition, {
-          originalSql = "${local.vpc-base-sql}\nwhere partition_utc > date_format(at_timezone(now(), 'UTC') - interval '${tier.days}' day, '%Y/%m/%d/%H')"
-        })
-
-        history-days = tier.days
-      } if tier.view-name != null
-  })
-
-  database_name = var.schema
+  database_name = aws_glue_catalog_database.flow-logs.name
   name          = each.key
 
   table_type = "VIRTUAL_VIEW"
@@ -167,52 +120,34 @@ resource "aws_glue_catalog_table" "view" {
   # Thanks to Theo (https://stackoverflow.com/users/1109/theo) for his work reverse-engineering how to do this, since
   #  AWS didn't bother to document it!
   #
-  view_original_text = "/* Presto View: ${base64encode(jsonencode(each.value.trino-definition))} */"
+  view_original_text = "/* Presto View: ${base64encode(jsonencode(each.value.trino-view))} */"
   view_expanded_text = "/* Presto View */"
 
   dynamic "partition_keys" {
-    for_each = [
-      for column-name in each.value.columns : column-name
-      if each.value.column-definitions[column-name].partition-key
-    ]
-    iterator = column-name
+    for_each = each.value.hive-partition-keys
+    iterator = partition-key
 
     content {
-      name = column-name.value
-      type = each.value.column-definitions[column-name.value].hive-logical-type
-      comment = "Type: ${
-        each.value.column-definitions[column-name.value].trino-type
-        }${
-        each.value.column-definitions[column-name.value].nullable ? " (nullable)" : ""
-        } \u2022 Description: ${
-        each.value.column-definitions[column-name.value].description
-      }"
+      name    = partition-key.value.name
+      type    = partition-key.value.type
+      comment = partition-key.value.comment
     }
   }
 
   dynamic "storage_descriptor" {
-    for_each = ["x"] # Single iteration needed for nested dynamic blocks
+    for_each = ["x"] # Nested dynamic block "columns" requires outer dynamic block with single iteration
 
     content {
       number_of_buckets = 0
 
       dynamic "columns" {
-        for_each = [
-          for column-name in each.value.columns : column-name
-          if !each.value.column-definitions[column-name].partition-key
-        ]
-        iterator = column-name
+        for_each = each.value.hive-columns
+        iterator = column
 
         content {
-          name = column-name.value
-          type = each.value.column-definitions[column-name.value].hive-logical-type
-          comment = "Type: ${
-            each.value.column-definitions[column-name.value].trino-type
-            }${
-            each.value.column-definitions[column-name.value].nullable ? " (nullable)" : ""
-            } \u2022 Description: ${
-            each.value.column-definitions[column-name.value].description
-          }"
+          name    = column.value.name
+          type    = column.value.type
+          comment = column.value.comment
         }
       }
     }
@@ -221,5 +156,73 @@ resource "aws_glue_catalog_table" "view" {
   parameters = {
     presto_view = "true"
     comment     = "Presto View"
+  }
+}
+
+locals {
+  athena-table-definitions = {
+    (var.tgw-table-name) = {
+      hive-columns = [
+        for column in var.tgw-columns : {
+          name = column
+          type = local.tgw-column-definitions[column].hive-physical-type
+        } if !local.tgw-column-definitions[column].synthetic
+      ]
+
+      hive-partition-keys = [
+        for column in var.tgw-columns : {
+          name = column
+          type = local.tgw-column-definitions[column].hive-physical-type
+        } if local.tgw-column-definitions[column].partition-key
+      ]
+
+      days      = var.data-management.tgw.tiers[length(var.data-management.tgw.tiers) - 1].days
+      s3-prefix = var.data-management.tgw.raw-s3-prefix
+    }
+
+    (var.vpc-table-name) = {
+      hive-columns = [
+        for column in var.vpc-columns : {
+          name = column
+          type = local.vpc-column-definitions[column].hive-physical-type
+        } if !local.vpc-column-definitions[column].synthetic
+      ]
+
+      hive-partition-keys = [
+        for column in var.vpc-columns : {
+          name = column
+          type = local.vpc-column-definitions[column].hive-physical-type
+        } if local.vpc-column-definitions[column].partition-key
+      ]
+
+      days      = var.data-management.vpc.tiers[length(var.data-management.vpc.tiers) - 1].days
+      s3-prefix = var.data-management.vpc.raw-s3-prefix
+    }
+  }
+
+  athena-view-definitions = merge(
+    {
+      for tier in var.data-management.tgw.tiers : tier.view-name => {
+        hive-columns        = local.tgw-hive-columns
+        hive-partition-keys = local.tgw-hive-partition-keys
+        trino-view = merge(local.tgw-trino-view-definition, {
+          originalSql = "${local.tgw-base-sql}\n${local.tier-where-clauses[tier.days]}"
+        })
+      } if tier.view-name != null
+    },
+    {
+      for tier in var.data-management.vpc.tiers : tier.view-name => {
+        hive-columns        = local.vpc-hive-columns
+        hive-partition-keys = local.vpc-hive-partition-keys
+        trino-view = merge(local.vpc-trino-view-definition, {
+          originalSql = "${local.vpc-base-sql}\n${local.tier-where-clauses[tier.days]}"
+        })
+      } if tier.view-name != null
+    },
+  )
+
+  tier-where-clauses = {
+    for days in distinct(concat(var.data-management.tgw.tiers[*].days, var.data-management.vpc.tiers[*].days)) :
+    days => "where partition_utc > date_format(at_timezone(now(), 'UTC') - interval '${days}' day, '%Y/%m/%d/%H')"
   }
 }
